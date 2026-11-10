@@ -3,6 +3,7 @@ package memory
 import (
 	"sync"
 
+	"github.com/gorilla/websocket"
 	"github.com/varunarora1606/Probo/internal/types"
 )
 
@@ -46,4 +47,13 @@ var BetBook = BetBookType{
 
 var MarketBook = MarketBookType{
 	Data: make(map[string]types.SymbolBook),
+}
+
+type ServerType struct {
+	Mu sync.RWMutex
+	Conns map[string]map[*websocket.Conn]bool
+}
+
+var Server = ServerType{
+	Conns: make(map[string]map[*websocket.Conn]bool),
 }

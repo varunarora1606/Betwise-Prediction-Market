@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"github.com/varunarora1606/Probo/internal/database"
 	"github.com/varunarora1606/Probo/internal/types"
 )
@@ -44,15 +45,15 @@ func Worker() {
 					orderEvents = append(orderEvents, types.Delta{
 						Msg: "matched",
 						Order: types.Order{
-							BetId: uuid.NewString(),
-							EventId: uuid.NewString(),
-							UserID: input.UserId,
-							Symbol: input.Symbol,
-							Side: input.StockSide,
+							BetId:           uuid.NewString(),
+							EventId:         uuid.NewString(),
+							UserID:          input.UserId,
+							Symbol:          input.Symbol,
+							Side:            input.StockSide,
 							TransactionType: input.TransactionType,
-							Price: microTrade.Price,
-							Quantity: microTrade.Quantity,
-							CreatedAt: time.Now(),
+							Price:           microTrade.Price,
+							Quantity:        microTrade.Quantity,
+							CreatedAt:       time.Now(),
 						},
 					})
 				}
@@ -105,17 +106,24 @@ func Worker() {
 		}
 
 		if len(orderEvents) > 0 {
-			var redisPayload []interface{}
-			for _, event := range orderEvents {
-				jsonEvent, err := json.Marshal(event)
-				if err != nil {
-					log.Printf("Error marshalling order event: %v", err)
-					continue
-				}
-				redisPayload = append(redisPayload, jsonEvent)
+			// var redisPayload []interface{}
+			payload, err := json.Marshal(orderEvents)
+			if err != nil {
+				log.Printf("Error marshalling order event: %v", err)
+				continue
 			}
+			// for _, event := range orderEvents {
+			// 	redisPayload = append(redisPayload, jsonEvent)
+			// }
 
-			err = database.RClient.LPush(database.Ctx, "order_events", redisPayload...).Err()
+			err = database.RClient.XAdd(database.Ctx, &redis.XAddArgs{
+				Stream: database.TradeStream,
+				Values: map[string]interface{}{
+					"batch_id": uuid.NewString(),
+					"events":   string(payload),
+				},
+			}).Err()
+			// err = database.RClient.LPush(database.Ctx, "order_events", redisPayload...).Err()
 			if err != nil {
 				log.Printf("Error during LPUSH on 'order_events': %v", err)
 				continue

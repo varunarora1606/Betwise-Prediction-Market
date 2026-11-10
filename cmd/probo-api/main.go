@@ -19,6 +19,7 @@ import (
 	"github.com/varunarora1606/Probo/internal/http/handlers/order"
 	"github.com/varunarora1606/Probo/internal/middlewares"
 	"github.com/varunarora1606/Probo/internal/models"
+	"github.com/varunarora1606/Probo/internal/ws"
 )
 
 func main() {
@@ -61,6 +62,7 @@ func main() {
 	router.GET("/api/v1/order/orderbook", order.GetOrderBookHandler)
 	router.GET("/api/v1/order/market", order.GetMarketHandler)
 	router.GET("/api/v1/order/markets", order.GetMarketsHandler)
+	router.GET("/ws", ws.WsHandler)
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {

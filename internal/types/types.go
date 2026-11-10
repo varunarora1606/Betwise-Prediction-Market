@@ -48,7 +48,7 @@ type BetDetails struct {
 }
 
 type SymbolBook struct {
-	Title 	   string
+	Title      string
 	Question   string
 	EndTime    int64
 	YesClosing int
@@ -61,8 +61,8 @@ type Delta struct {
 }
 
 type MicroTrade struct {
-	Quantity int	`json:"quantity"`
-	Price    int	`json:"price"`
+	Quantity int `json:"quantity"`
+	Price    int `json:"price"`
 }
 
 type Trade struct {
@@ -75,7 +75,7 @@ type Input struct {
 	Fnx             string
 	UserId          string
 	Symbol          string
-	Title			string
+	Title           string
 	Question        string
 	EndTime         int64
 	Quantity        int
@@ -100,7 +100,7 @@ type Output struct {
 }
 
 type PortfolioItem struct {
-	Title 	string `json:"title"`
+	Title    string `json:"title"`
 	Symbol   string `json:"symbol"`
 	Value    int    `json:"value"`
 	Quantity int    `json:"quantity"`
