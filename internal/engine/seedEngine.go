@@ -26,7 +26,7 @@ func seedEngine() {
 		panic("Failed to seed engine")
 	}
 	for _, inrBalance := range inrBalances {
-		OnRampInr(inrBalance.UserId, inrBalance.Quantity, 0)
+		OnRampInr(inrBalance.UserId, inrBalance.Quantity)
 	}
 
 	

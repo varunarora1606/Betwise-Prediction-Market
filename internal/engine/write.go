@@ -37,12 +37,12 @@ func CreateMarket(symbol string, title string, question string, endTime int64) e
 	return nil
 }
 
-func OnRampInr(userId string, quantity int, locked int) types.Balance {
+func OnRampInr(userId string, quantity int) types.Balance {
 	memory.InrBalance.Mu.Lock()
 	defer memory.InrBalance.Mu.Unlock()
 
 	userBalance := memory.InrBalance.Data[userId]
-	userBalance.Quantity = quantity + locked
+	userBalance.Quantity += quantity
 	memory.InrBalance.Data[userId] = userBalance
 
 	return userBalance

@@ -76,3 +76,10 @@ func VerifyJWT(publicKey string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+func DevAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set("userId", "test123")
+		c.Next()
+	}
+}

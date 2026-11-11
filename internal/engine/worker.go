@@ -64,7 +64,7 @@ func Worker() {
 				output.Err = err.Error()
 			}
 		case "on_ramp_inr":
-			balance := OnRampInr(input.UserId, input.Quantity, 0)
+			balance := OnRampInr(input.UserId, input.Quantity)
 			output.InrBalance = balance
 		case "get_market":
 			market, err := GetMarket(input.Symbol)

@@ -278,7 +278,7 @@ func OnRampInrHandler(c *gin.Context) {
 
 	var inrBalance models.InrBalance
 
-	if result := database.DB.First(inrBalance, "user_id = ?", GetUserID(c)); result.Error != nil {
+	if result := database.DB.First(&inrBalance, "user_id = ?", GetUserID(c)); result.Error != nil {
 		inrBalance = models.InrBalance{
 			UserId: GetUserID(c),
 			Quantity: req.Quantity,
@@ -302,6 +302,7 @@ func OnRampInrHandler(c *gin.Context) {
 		UserId:   GetUserID(c),
 	})
 
+	// TODO: If Db fails here then it is really bad as then market in memory will have money without actually deducting money from bank and adding to db. If db fails then in memory inr value should revert back. (Think about it)
 	if err != nil || result.Err != "" {
 		if err := database.DB.Where("user_id = ?", GetUserID(c)).Delete(&models.InrBalance{}).Error; err != nil{
 			c.JSON(http.StatusBadRequest, gin.H{"message": "Error", "error": "error while undoing the balance transaction in db"})

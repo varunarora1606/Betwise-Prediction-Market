@@ -20,21 +20,31 @@ func Worker() {
 		var updateOrders []types.Order = []types.Order{}
 		var matchedOrders []types.Order = []types.Order{}
 		result, err := RClient.XReadGroup(Ctx, &redis.XReadGroupArgs{
-			Group:    "db-group", // Get this from Main function in worker func
-			Consumer: "db-worker-1",
+			Group:    DBGroup,
+			Consumer: "db-worker-1", // I think this should not be hard coded as we can scale this also with multiple workers
 			Streams:  []string{TradeStream, ">"},
 			Count:    int64(batchSize),
 			Block:    blockTime,
 		}).Result()
 		// result, err := RClient.BRPop(Ctx, 0, "order_events").Result()
 		if err != nil {
-			fmt.Println("error during BRPOP on 'order_events':", err.Error())
+			if err == redis.Nil {
+				// No new messages.
+				continue
+			}
+
+			fmt.Println("Error reading from Redis Stream: ", err)
+			time.Sleep(time.Second)
 			continue
 		}
 
+		if len(result) == 0 {
+			continue
+		}
+		stream := result[0]
+
 		var deltas []types.Delta
 
-		stream := result[0]
 		for _, message := range stream.Messages {
 			msg := message.Values["events"].(string)
 
@@ -219,7 +229,6 @@ func Worker() {
 			}
 		}
 	}
-
 
 	// switch delta.Msg {
 	// case "open":
