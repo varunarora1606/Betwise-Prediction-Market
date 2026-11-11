@@ -17,8 +17,24 @@ var upgrader = websocket.Upgrader{
 }
 
 func subscribe(conn *websocket.Conn, message []byte) {
+	fmt.Println("Entered")
+	memory.Server.Mu.Lock()
+    defer memory.Server.Mu.Unlock()
 	memory.Server.Conns[string(message)[10:]][conn] = true
 	conn.WriteMessage(websocket.TextMessage, message)
+}
+
+func unsubscribeAll(conn *websocket.Conn) {
+    memory.Server.Mu.Lock()
+    defer memory.Server.Mu.Unlock()
+
+    for symbol, conns := range memory.Server.Conns {
+        delete(conns, conn)
+
+        if len(conns) == 0 {
+            delete(memory.Server.Conns, symbol)
+        }
+    }
 }
 
 func WsHandler(c *gin.Context) {
@@ -29,6 +45,7 @@ func WsHandler(c *gin.Context) {
 		return
 	}
 
+	defer unsubscribeAll(conn)
 	defer conn.Close()
 
 	for {
@@ -40,6 +57,7 @@ func WsHandler(c *gin.Context) {
 		}
 
 		if msgType == websocket.TextMessage && string(message)[:9] == "SUBSCRIBE" {
+			memory.Server.Mu.Lock()
 			if _, exists := memory.Server.Conns[string(message)[10:]]; !exists {
 				// Temp way, Change it in future and add marketr from backend, do not allow user to create it
 				fmt.Println("Creating market for ws layer")
@@ -49,6 +67,7 @@ func WsHandler(c *gin.Context) {
 				fmt.Println("user is already subscribed to this market")
 				continue
 			}
+			memory.Server.Mu.Unlock()
 			go subscribe(conn, message)
 		}
 	}

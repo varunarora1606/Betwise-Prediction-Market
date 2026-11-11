@@ -91,6 +91,7 @@ func processBatch(messages []redis.XMessage) error {
 	var updateOrders []types.Order = []types.Order{}
 	var matchedOrders []types.Order = []types.Order{}
 	for _, delta := range deltas {
+		fmt.Println(delta.Msg)
 		switch delta.Msg {
 		case "open":
 			openOrders = append(openOrders, delta.Order)

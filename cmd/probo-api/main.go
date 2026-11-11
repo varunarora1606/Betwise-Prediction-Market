@@ -93,6 +93,7 @@ func main() {
 
 	go engine.Worker()
 	go database.Worker()
+	go ws.Worker()
 	go func() {
 		fmt.Println("Server started")
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
