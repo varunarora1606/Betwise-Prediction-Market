@@ -15,6 +15,8 @@ var DB *gorm.DB
 var RClient *redis.Client
 var Ctx = context.Background()
 
+const TradeStream = "DbAndWsStream" 
+
 func Connect(db_url string, redis_url string) {
 	dsn := db_url
 

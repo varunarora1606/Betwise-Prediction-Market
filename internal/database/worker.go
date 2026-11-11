@@ -3,6 +3,7 @@ package database
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/varunarora1606/Probo/internal/models"
@@ -11,48 +12,44 @@ import (
 )
 
 var batchSize int = 20
+var blockTime time.Duration = 5 * time.Second
 
 func Worker() {
 	for {
 		var openOrders []types.Order = []types.Order{}
 		var updateOrders []types.Order = []types.Order{}
 		var matchedOrders []types.Order = []types.Order{}
-		result, err := RClient.BRPop(Ctx, 0, "order_events").Result()
+		result, err := RClient.XReadGroup(Ctx, &redis.XReadGroupArgs{
+			Group:    "db-group", // Get this from Main function in worker func
+			Consumer: "db-worker-1",
+			Streams:  []string{TradeStream, ">"},
+			Count:    int64(batchSize),
+			Block:    blockTime,
+		}).Result()
+		// result, err := RClient.BRPop(Ctx, 0, "order_events").Result()
 		if err != nil {
 			fmt.Println("error during BRPOP on 'order_events':", err.Error())
 			continue
 		}
-		data := result[1]
-		var delta types.Delta
-		if err := json.Unmarshal([]byte(data), &delta); err != nil {
-			fmt.Printf("error during unmarshalling of %s in 'output': %v", data, err)
-			continue
-		}
 
-		switch delta.Msg {
-		case "open":
-			openOrders = append(openOrders, delta.Order)
-		case "update":
-			updateOrders = append(updateOrders, delta.Order)
-		case "matched":
-			matchedOrders = append(matchedOrders, delta.Order)
-		default:
-			fmt.Println("Default delta:", delta.Msg)
-		}
+		var deltas []types.Delta
 
-		for i := 0; i < batchSize; i++ {
-			data, err = RClient.RPop(Ctx, "order_events").Result()
-			if err == redis.Nil {
-				break
-			} else if err != nil {
-				fmt.Println("RPOP error:", err)
-				break
-			}
-			var delta types.Delta
-			if err := json.Unmarshal([]byte(data), &delta); err != nil {
-				fmt.Printf("error during unmarshalling of %s in 'order_events': %v", data, err)
+		stream := result[0]
+		for _, message := range stream.Messages {
+			msg := message.Values["events"].(string)
+
+			var orderEvents []types.Delta
+
+			if err := json.Unmarshal([]byte(msg), &orderEvents); err != nil {
+				fmt.Printf("error during unmarshalling in 'output': %v", err)
 				continue
 			}
+			deltas = append(deltas, orderEvents...)
+		}
+
+		// TODO: Check from here.
+
+		for _, delta := range deltas {
 			switch delta.Msg {
 			case "open":
 				openOrders = append(openOrders, delta.Order)
@@ -95,7 +92,7 @@ func Worker() {
 					if order.TransactionType == types.Buy {
 						if err := tx.Model(&models.InrBalance{}).
 							Where("user_id = ?", order.UserId).
-							Update("quantity", gorm.Expr("quantity - ?", order.Price * (oldOrder.Quantity - order.Quantity))).Error; err != nil {
+							Update("quantity", gorm.Expr("quantity - ?", order.Price*(oldOrder.Quantity-order.Quantity))).Error; err != nil {
 							return err
 						}
 
@@ -121,7 +118,7 @@ func Worker() {
 					} else {
 						if err := tx.Model(&models.InrBalance{}).
 							Where("user_id = ?", order.UserId).
-							Update("quantity", gorm.Expr("quantity + ?", order.Price * (oldOrder.Quantity - order.Quantity))).Error; err != nil {
+							Update("quantity", gorm.Expr("quantity + ?", order.Price*(oldOrder.Quantity-order.Quantity))).Error; err != nil {
 							return err
 						}
 
@@ -147,7 +144,7 @@ func Worker() {
 
 					return nil
 				})
-				
+
 				if err != nil {
 					fmt.Println("error while updating order: ", order, "\nerror: ", err.Error())
 				}
@@ -164,7 +161,7 @@ func Worker() {
 					if order.TransactionType == types.Buy {
 						if err := tx.Model(&models.InrBalance{}).
 							Where("user_id = ?", order.UserId).
-							Update("quantity", gorm.Expr("quantity - ?", order.Price * (order.Quantity))).Error; err != nil {
+							Update("quantity", gorm.Expr("quantity - ?", order.Price*(order.Quantity))).Error; err != nil {
 							return err
 						}
 
@@ -189,7 +186,7 @@ func Worker() {
 					} else {
 						if err := tx.Model(&models.InrBalance{}).
 							Where("user_id = ?", order.UserId).
-							Update("quantity", gorm.Expr("quantity + ?", order.Price * (order.Quantity))).Error; err != nil {
+							Update("quantity", gorm.Expr("quantity + ?", order.Price*(order.Quantity))).Error; err != nil {
 							return err
 						}
 
@@ -222,6 +219,36 @@ func Worker() {
 			}
 		}
 	}
+
+
+	// switch delta.Msg {
+	// case "open":
+	// 	openOrders = append(openOrders, delta.Order)
+	// case "update":
+	// 	updateOrders = append(updateOrders, delta.Order)
+	// case "matched":
+	// 	matchedOrders = append(matchedOrders, delta.Order)
+	// default:
+	// 	fmt.Println("Default delta:", delta.Msg)
+	// }
+
+	// TODO: Continue from here.
+
+	// for i := 0; i < batchSize; i++ {
+	// 	data, err = RClient.RPop(Ctx, "order_events").Result()
+	// 	if err == redis.Nil {
+	// 		break
+	// 	} else if err != nil {
+	// 		fmt.Println("RPOP error:", err)
+	// 		break
+	// 	}
+	// 	var delta types.Delta
+	// 	if err := json.Unmarshal([]byte(data), &delta); err != nil {
+	// 		fmt.Printf("error during unmarshalling of %s in 'order_events': %v", data, err)
+	// 		continue
+	// 	}
+
+	// }
 }
 
 func convertTypesInModels(typesOrders []types.Order) []models.Order {
