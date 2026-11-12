@@ -13,16 +13,59 @@ import (
 
 var batchSize int = 20
 var blockTime time.Duration = 5 * time.Second
+var consumer string = "db-worker-1"
 
 func Worker() {
+	var cursor = "0-0"
 	for {
 		// TODO: XREADGROUP with > won't automatically retry the failed messages.
 		// First I should implement XAUTOCLAIM to recover messages from crashed workers
 		// And next stream should not be read till this stream is persisted as there might be some orders which are dependent on 1st stream orders. (Like matching of 2nd stream order with 1st stream open order.)
 
+		// Recovering pending messages first
+		messages, nextCursor, err := RClient.XAutoClaim(
+            Ctx,
+            &redis.XAutoClaimArgs{
+                Stream:   TradeStream,
+                Group:    DBGroup,
+                Consumer: consumer,
+                MinIdle:  0,
+                Start:    cursor,
+                Count:    int64(batchSize),
+            },
+        ).Result()
+
+        if err != nil {
+            fmt.Println("XAUTOCLAIM failed:", err)
+            time.Sleep(time.Second)
+            continue
+        }
+
+		// TODO: if It fails endlessly then what?? I think we should give it a endpoint like 4-5 retries then crash redis as I dont want other stream to process before the last did. 
+		// Or there is no need of XAUTOCLAIM as u caan just loop on ack below for 5-6 times and then crash redis.
+
+        cursor = nextCursor
+
+        if len(messages) > 0 {
+            fmt.Printf("Recovered %d pending messages\n", len(messages))
+
+            if err := processAndAck(messages); err != nil {
+                fmt.Println("Recovered batch failed:", err)
+            }
+
+            continue
+        }
+
+        // More PEL entries might exist beyond this cursor.
+        // Finish scanning before reading new messages.
+        if cursor != "0-0" {
+            continue
+        }
+
+		// New Messages
 		result, err := RClient.XReadGroup(Ctx, &redis.XReadGroupArgs{
 			Group:    DBGroup,
-			Consumer: "db-worker-1", // I think this should not be hard coded as we can scale this also with multiple workers
+			Consumer: consumer, // I think this should not be hard coded as we can scale this also with multiple workers
 			Streams:  []string{TradeStream, ">"},
 			Count:    int64(batchSize),
 			Block:    blockTime,
@@ -45,26 +88,31 @@ func Worker() {
 		stream := result[0]
 
 		// Batch Process (if 1 fails all 20 message streams are failled to maintain atomicity in txn.)
-		if err := processBatch(stream.Messages); err != nil {
+		if err := processAndAck(stream.Messages); err != nil {
 			fmt.Println("Batch processing failed:", err)
-			// No ack here.
 			continue
 		}
-
-		// Acknowledge (After db commits every msg)
-		ids := make([]string, 0, len(stream.Messages))
-
-		for _, id := range stream.Messages {
-			ids = append(ids, id.ID)
-		}
-
-		if err := RClient.XAck(Ctx, TradeStream, DBGroup, ids...).Err(); err != nil {
-			// TODO: If db succeds but ack only fails then what. So I should create a database table for processed redis message ids. So that first we check that and then just ack that and move forward if it already exist. 
-			fmt.Println("XACK failed:", err)
-		}
-
 	}
 
+}
+
+func processAndAck(messages []redis.XMessage) error {
+	if err := processBatch(messages); err != nil {
+		return fmt.Errorf("%s", err)
+		// No ack here.
+	}
+
+	ids := make([]string, 0, len(messages))
+
+	for _, id := range messages {
+		ids = append(ids, id.ID)
+	}
+
+	if err := RClient.XAck(Ctx, TradeStream, DBGroup, ids...).Err(); err != nil {
+		// TODO: If db succeds but ack only fails then what. So I should create a database table for processed redis message ids. So that first we check that and then just ack that and move forward if it already exist.
+		return fmt.Errorf("XACK failed: %s", err)
+	}
+	return nil
 }
 
 func processBatch(messages []redis.XMessage) error {
